@@ -10,12 +10,12 @@ type CohereRequestBody = Cohere.ChatRequest & {
 
 function getMessageContent(message: OpenAI.ChatCompletionMessageParam) {
   if (!message.content) throw new Error("Message content is required.");
-  
+
   if (typeof message.content === "string") {
     return message.content;
   } else {
     let messageContent = "";
-    
+
     // Only grab the text from the message
     for (const content of message.content) {
       if (content.type === "text") {
@@ -53,7 +53,7 @@ function getAPIKey(c: Context<Env, "/v1/chat/completions", BlankInput>) {
 }
 
 export async function handleChatCompletions(
-  c: Context<Env, "/v1/chat/completions", BlankInput>
+  c: Context<Env, "/v1/chat/completions", BlankInput>,
 ) {
   const apiKey = getAPIKey(c);
 
@@ -76,8 +76,7 @@ export async function handleChatCompletions(
   };
 
   for (const message of body.messages) {
-    type ChatMessageRoleType =
-      (typeof Cohere.ChatMessageRole)[keyof typeof Cohere.ChatMessageRole];
+    type ChatMessageRoleType = "SYSTEM" | "USER" | "CHATBOT";
 
     let role: ChatMessageRoleType = "SYSTEM";
     let messageContent: string = "";
@@ -86,10 +85,10 @@ export async function handleChatCompletions(
     const isLastMessage = body.messages[body.messages.length - 1] === message;
 
     if (message.role === "system") {
-      role = Cohere.ChatMessageRole.System;
-      messageContent = message.content;
+      role = "SYSTEM";
+      messageContent = message.content as string;
     } else if (message.role === "user") {
-      role = Cohere.ChatMessageRole.User;
+      role = "USER";
 
       messageContent = getMessageContent(message);
 
@@ -98,7 +97,7 @@ export async function handleChatCompletions(
         apiRequestBody.message = messageContent;
       }
     } else if (message.role === "assistant") {
-      role = Cohere.ChatMessageRole.Chatbot;
+      role = "CHATBOT";
 
       messageContent = getMessageContent(message);
     }
@@ -148,20 +147,27 @@ export async function handleChatCompletions(
     const returnCompletionBody: OpenAI.ChatCompletion = {
       id: "chatcmpl-123",
       object: "chat.completion",
-      created: 1677652288,
+      created: new Date().getTime(),
       model: body.model,
-      system_fingerprint: "fp_44709d6fcb",
       choices: [
         {
           index: 0,
           message: {
             role: "assistant",
             content: chat.text,
+            refusal: null,
           },
           logprobs: null,
           finish_reason: "stop",
         },
       ],
+      usage: {
+        completion_tokens: chat.meta?.billedUnits?.outputTokens!,
+        prompt_tokens: chat.meta?.billedUnits?.inputTokens!,
+        total_tokens:
+          chat.meta?.billedUnits?.inputTokens! +
+          chat.meta?.billedUnits?.outputTokens!,
+      },
     };
 
     return c.json(returnCompletionBody);
